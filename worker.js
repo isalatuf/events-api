@@ -74,25 +74,13 @@ const corsHeaders = {
 
 export default {
   async fetch(request, env) {
-
-    console.log('REQUEST METHOD:', request.method)
-
-    if (request.method === 'OPTIONS') {
-      console.log('OPTIONS REQUEST')
-      return new Response(null, { status: 204, headers: corsHeaders })
-    }
-
-    if (request.method !== 'POST') {
-      console.log('INVALID METHOD')
-      return new Response('Wrong request method', { status: 405, headers: corsHeaders })
-    }
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
+    if (request.method !== 'POST') return new Response('Wrong request method', { status: 405, headers: corsHeaders })
 
     let body
     try {
       body = await request.json()
-      console.log('BODY RECEIVED:', body)
-    } catch (e) {
-      console.log('JSON PARSE ERROR:', e)
+    } catch {
       return new Response('Invalid JSON', { status: 400, headers: corsHeaders })
     }
 
@@ -102,16 +90,7 @@ export default {
     const gadsAccessToken = env.GADS_ACCESS_TOKEN || null
     const gadsDeveloperToken = env.GADS_DEVELOPER_TOKEN || null
 
-    console.log('ENV VALUES:', {
-      metaAccessToken,
-      gaSecretKey,
-      gadsCustomerId,
-      gadsAccessToken,
-      gadsDeveloperToken
-    })
-
     body = toCamelDeep(body)
-    console.log('BODY CAMEL:', body)
 
     const { data = {}, meta = {} } = body
 
@@ -128,42 +107,25 @@ export default {
       cookieGclid
     } = data
 
+    console.info('Events', {
+      ['Meta']: metaEvent,
+      ['Google Analytics']: gaEvent,
+      ['Google Ads']: gadsConversionLabel
+    })
+
     const {
       metaPixelId,
       metaTestCode,
       gaMeasurementId
     } = meta
 
-    console.log('EXTRACTED DATA:', {
-      metaEvent,
-      gaEvent,
-      gadsConversionLabel,
-      eventUrl,
-      eventId,
-      userId,
-      metaPixelId,
-      gaMeasurementId
-    })
+    if (!metaEvent && !gaEvent && !gadsConversionLabel) return new Response('Event/conversion is missing', { status: 400, headers: corsHeaders })
 
-    if (!metaEvent && !gaEvent && !gadsConversionLabel) {
-      console.log('NO EVENT TYPE')
-      return new Response('Event/conversion is missing', { status: 400, headers: corsHeaders })
-    }
+    if (!eventId) return new Response('Event ID is missing', { status: 400, headers: corsHeaders })
 
-    if (!eventId) {
-      console.log('NO EVENT ID')
-      return new Response('Event ID is missing', { status: 400, headers: corsHeaders })
-    }
+    if (!eventUrl) return new Response('Event URL is missing', { status: 400, headers: corsHeaders })
 
-    if (!eventUrl) {
-      console.log('NO EVENT URL')
-      return new Response('Event URL is missing', { status: 400, headers: corsHeaders })
-    }
-
-    if (!userId) {
-      console.log('NO USER ID')
-      return new Response('User ID is missing', { status: 400, headers: corsHeaders })
-    }
+    if (!userId) return new Response('User ID is missing', { status: 400, headers: corsHeaders })
 
     const headers = Object.fromEntries(request.headers.entries())
 
@@ -173,8 +135,6 @@ export default {
       null
 
     const userAgent = headers['user-agent'] || null
-
-    console.log('CLIENT INFO:', { clientIp, userAgent })
 
     const parsedUserName =
       userData.name && (!userData.firstName || !userData.lastName)
@@ -189,25 +149,15 @@ export default {
     const hashedUserEmail = userData.email ? await sha256(userData.email) : null
     const hashedUserPhone = userData.phone ? await sha256(userData.phone) : null
 
-    console.log('HASHED DATA:', {
-      hashedUserFirstName,
-      hashedUserLastName,
-      hashedUserEmail,
-      hashedUserPhone
-    })
-
     const timestamp = Math.floor(Date.now() / 1000)
     const eventUtms = extractUtms(eventUrl)
-
-    console.log('UTMS:', eventUtms)
 
     let metaPromise = Promise.resolve('Event skipped')
     let gaPromise = Promise.resolve('Event skipped')
     let gadsPromise = Promise.resolve('Event skipped')
 
     if (metaEvent && metaPixelId && metaAccessToken) {
-      console.log('META SERVICE CALLING')
-      metaPromise = metaService({ metaPayload: {
+      const metaPayload = {
         data: [{
           event_name: metaEvent,
           event_id: eventId,
@@ -229,14 +179,13 @@ export default {
             ...eventUtms
           }
         }]
-      }, metaPixelId, metaAccessToken, metaTestCode })
-    } else {
-      console.log('META SKIPPED')
+      }
+
+      metaPromise = metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode })
     }
 
     if (gaEvent && gaMeasurementId && gaSecretKey) {
-      console.log('GA SERVICE CALLING')
-      gaPromise = gaService({ gaPayload: {
+      const gaPayload = {
         client_id: userId,
         events: [{
           name: gaEvent,
@@ -248,14 +197,13 @@ export default {
             ...eventUtms
           }
         }]
-      }, gaMeasurementId, gaSecretKey })
-    } else {
-      console.log('GA SKIPPED')
+      }
+
+      gaPromise = gaService({ gaPayload, gaMeasurementId, gaSecretKey })
     }
 
     if (cookieGclid && gadsConversionLabel && gadsCustomerId && gadsAccessToken && gadsDeveloperToken) {
-      console.log('GADS SERVICE CALLING')
-      gadsPromise = gadsService({ gadsPayload: {
+      const gadsPayload = {
         conversions: [{
           conversionAction: `customers/${gadsCustomerId}/conversionActions/${gadsConversionLabel}`,
           gclid: cookieGclid,
@@ -269,12 +217,10 @@ export default {
           ].filter(Boolean)
         }],
         partialFailure: true
-      }, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
-    } else {
-      console.log('GADS SKIPPED')
-    }
+      }
 
-    console.log('AWAITING PROMISES')
+      gadsPromise = gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
+    }
 
     const [metaResult, gaResult, gadsResult] = await Promise.all([
       metaPromise,
@@ -282,18 +228,18 @@ export default {
       gadsPromise
     ])
 
-    console.log('RESULTS:', { metaResult, gaResult, gadsResult })
-
-    const finalJson = {
-      Meta: metaResult,
-      'Google Analytics': gaResult,
-      'Google Ads': gadsResult
-    }
-
-    console.log('FINAL JSON:', finalJson)
+    console.info('Results', {
+      ['Meta']: metaResult,
+      ['Google Analytics']: gaResult,
+      ['Google Ads']: gadsResult
+    })
 
     return new Response(
-      JSON.stringify(finalJson),
+      JSON.stringify('Results', {
+        ['Meta']: metaResult,
+        ['Google Analytics']: gaResult,
+        ['Google Ads']: gadsResult
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
