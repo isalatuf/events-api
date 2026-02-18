@@ -216,6 +216,15 @@ export default {
       gadsPromise = gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
     }
 
+    const results = await Promise.allSettled([
+      metaPromise,
+      gaPromise,
+      gadsPromise
+    ])
+
+    return new Response(JSON.stringify(results))
+
+
     const [metaResult, gaResult, gadsResult] = await Promise.all([
       metaPromise,
       gaPromise,
