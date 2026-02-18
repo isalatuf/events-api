@@ -73,7 +73,7 @@ const corsHeaders = {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders })
     if (request.method !== 'POST') return new Response('Wrong request method', { status: 405, headers: corsHeaders })
 
@@ -84,166 +84,166 @@ export default {
       return new Response('Invalid JSON', { status: 400, headers: corsHeaders })
     }
 
-    const metaAccessToken = env.META_ACCESS_TOKEN || null
-    const gaSecretKey = env.GA_SECRET_KEY || null
-    const gadsCustomerId = env.GADS_CUSTOMER_ID || null
-    const gadsAccessToken = env.GADS_ACCESS_TOKEN || null
-    const gadsDeveloperToken = env.GADS_DEVELOPER_TOKEN || null
+    ctx.waitUntil((async () => {
 
-    body = toCamelDeep(body)
+      const metaAccessToken = env.META_ACCESS_TOKEN || null
+      const gaSecretKey = env.GA_SECRET_KEY || null
+      const gadsCustomerId = env.GADS_CUSTOMER_ID || null
+      const gadsAccessToken = env.GADS_ACCESS_TOKEN || null
+      const gadsDeveloperToken = env.GADS_DEVELOPER_TOKEN || null
 
-    const { data = {}, meta = {} } = body
+      body = toCamelDeep(body)
 
-    const {
-      metaEvent,
-      gaEvent,
-      gadsConversionLabel,
-      eventUrl,
-      eventId,
-      userId,
-      userData = {},
-      cookieFbp,
-      cookieFbc,
-      cookieGclid
-    } = data
+      const { data = {}, meta = {} } = body
 
-    console.info('Processes', {
-      ['Meta']: metaEvent,
-      ['Google Analytics']: gaEvent,
-      ['Google Ads']: gadsConversionLabel
-    })
+      const {
+        metaEvent,
+        gaEvent,
+        gadsConversionLabel,
+        eventUrl,
+        eventId,
+        userId,
+        userData = {},
+        cookieFbp,
+        cookieFbc,
+        cookieGclid
+      } = data || {}
 
-    const {
-      metaPixelId,
-      metaTestCode,
-      gaMeasurementId
-    } = meta
+      const {
+        metaPixelId,
+        metaTestCode,
+        gaMeasurementId
+      } = meta || {}
 
-    if (!metaEvent && !gaEvent && !gadsConversionLabel) return new Response('Event/conversion is missing', { status: 400, headers: corsHeaders })
-
-    if (!eventId) return new Response('Event ID is missing', { status: 400, headers: corsHeaders })
-
-    if (!eventUrl) return new Response('Event URL is missing', { status: 400, headers: corsHeaders })
-
-    if (!userId) return new Response('User ID is missing', { status: 400, headers: corsHeaders })
-
-    const headers = Object.fromEntries(request.headers.entries())
-
-    const clientIp =
-      headers['cf-connecting-ip'] ||
-      headers['x-forwarded-for']?.split(',')[0].trim() ||
-      null
-
-    const userAgent = headers['user-agent'] || null
-
-    const parsedUserName =
-      userData.name && (!userData.firstName || !userData.lastName)
-        ? parseName(userData.name)
-        : null
-
-    const userFirstName = userData.firstName ?? parsedUserName?.firstName ?? null
-    const userLastName = userData.lastName ?? parsedUserName?.lastName ?? null
-
-    const hashedUserFirstName = userFirstName ? await sha256(userFirstName) : null
-    const hashedUserLastName = userLastName ? await sha256(userLastName) : null
-    const hashedUserEmail = userData.email ? await sha256(userData.email) : null
-    const hashedUserPhone = userData.phone ? await sha256(userData.phone) : null
-
-    const timestamp = Math.floor(Date.now() / 1000)
-    const eventUtms = extractUtms(eventUrl)
-
-    let metaPromise = Promise.resolve('Event skipped')
-    let gaPromise = Promise.resolve('Event skipped')
-    let gadsPromise = Promise.resolve('Event skipped')
-
-    if (metaEvent && metaPixelId && metaAccessToken) {
-      const metaPayload = {
-        data: [{
-          event_name: metaEvent,
-          event_id: eventId,
-          event_time: timestamp,
-          action_source: 'website',
-          event_source_url: eventUrl,
-          user_data: {
-            fn: hashedUserFirstName,
-            ln: hashedUserLastName,
-            em: hashedUserEmail,
-            ph: hashedUserPhone,
-            fbp: cookieFbp,
-            fbc: cookieFbc,
-            client_user_agent: userAgent,
-            client_ip_address: clientIp
-          },
-          custom_data: {
-            page_referrer: eventUrl,
-            ...eventUtms
-          }
-        }]
+      if (!eventId) {
+        console.error(`Event ID is missing`)
+        return
       }
 
-      metaPromise = metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode })
-    }
+      if (!eventUrl) {
+        console.error(`Event URL is missing`)
+        return
+      }
 
-    if (gaEvent && gaMeasurementId && gaSecretKey) {
-      const gaPayload = {
-        client_id: userId,
-        events: [{
-          name: gaEvent,
-          params: {
-            page_location: eventUrl,
-            page_referrer: eventUrl,
+      if (!userId) {
+        console.error(`User ID is missing`)
+        return
+      }
+
+      const headers = Object.fromEntries(request.headers.entries())
+
+      const clientIp =
+        headers['cf-connecting-ip'] ||
+        headers['x-forwarded-for']?.split(',')[0].trim() ||
+        null
+
+      const userAgent = headers['user-agent'] || null
+
+      const parsedUserName =
+        userData.name && (!userData.firstName || !userData.lastName)
+          ? parseName(userData.name)
+          : null
+
+      const userFirstName = userData.firstName ?? parsedUserName?.firstName ?? null
+      const userLastName = userData.lastName ?? parsedUserName?.lastName ?? null
+
+      const hashedUserFirstName = userFirstName ? await sha256(userFirstName) : null
+      const hashedUserLastName = userLastName ? await sha256(userLastName) : null
+      const hashedUserEmail = userData.email ? await sha256(userData.email) : null
+      const hashedUserPhone = userData.phone ? await sha256(userData.phone) : null
+
+      const timestamp = Math.floor(Date.now() / 1000)
+      const eventUtms = extractUtms(eventUrl)
+
+      const tasks = []
+
+      if (metaEvent && metaPixelId && metaAccessToken) {
+        const metaPayload = {
+          data: [{
+            event_name: metaEvent,
             event_id: eventId,
-            engagement_time_msec: 1,
-            ...eventUtms
-          }
-        }]
+            event_time: timestamp,
+            action_source: 'website',
+            event_source_url: eventUrl,
+            user_data: {
+              fn: hashedUserFirstName,
+              ln: hashedUserLastName,
+              em: hashedUserEmail,
+              ph: hashedUserPhone,
+              fbp: cookieFbp,
+              fbc: cookieFbc,
+              client_user_agent: userAgent,
+              client_ip_address: clientIp
+            },
+            custom_data: {
+              page_referrer: eventUrl,
+              ...eventUtms
+            }
+          }]
+        }
+
+        tasks.push(
+          metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode })
+        )
+
+        console.info(`Meta event [${metaEvent}] process started`)
+      } else {
+        console.warn(`Meta event [${metaEvent}] skipped`)
       }
 
-      gaPromise = gaService({ gaPayload, gaMeasurementId, gaSecretKey })
-    }
+      if (gaEvent && gaMeasurementId && gaSecretKey) {
+        const gaPayload = {
+          client_id: userId,
+          events: [{
+            name: gaEvent,
+            params: {
+              page_location: eventUrl,
+              page_referrer: eventUrl,
+              event_id: eventId,
+              engagement_time_msec: 1,
+              ...eventUtms
+            }
+          }]
+        }
 
-    if (cookieGclid && gadsConversionLabel && gadsCustomerId && gadsAccessToken && gadsDeveloperToken) {
-      const gadsPayload = {
-        conversions: [{
-          conversionAction: `customers/${gadsCustomerId}/conversionActions/${gadsConversionLabel}`,
-          gclid: cookieGclid,
-          conversionDateTime: new Date().toISOString().replace('T', ' ').replace('Z', '+00:00'),
-          conversionValue: 1,
-          currencyCode: 'BRL',
-          orderId: eventId,
-          userIdentifiers: [
-            hashedUserEmail && { hashedEmail: hashedUserEmail },
-            hashedUserPhone && { hashedPhoneNumber: hashedUserPhone }
-          ].filter(Boolean)
-        }],
-        partialFailure: true
+        tasks.push(
+          gaService({ gaPayload, gaMeasurementId, gaSecretKey })
+        )
+
+        console.info(`Google Analytics event [${gaEvent}] process started`)
+      } else {
+        console.warn(`Google Analytics event [${gaEvent}] skipped`)
       }
 
-      gadsPromise = gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
-    }
+      if (cookieGclid && gadsConversionLabel && gadsCustomerId && gadsAccessToken && gadsDeveloperToken) {
+        const gadsPayload = {
+          conversions: [{
+            conversionAction: `customers/${gadsCustomerId}/conversionActions/${gadsConversionLabel}`,
+            gclid: cookieGclid,
+            conversionDateTime: new Date().toISOString().replace('T', ' ').replace('Z', '+00:00'),
+            conversionValue: 1,
+            currencyCode: 'BRL',
+            orderId: eventId,
+            userIdentifiers: [
+              hashedUserEmail && { hashedEmail: hashedUserEmail },
+              hashedUserPhone && { hashedPhoneNumber: hashedUserPhone }
+            ].filter(Boolean)
+          }],
+          partialFailure: true
+        }
 
-    const [metaResult, gaResult, gadsResult] = await Promise.all([
-      metaPromise,
-      gaPromise,
-      gadsPromise
-    ])
+        tasks.push(
+          gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
+        )
 
-    console.info('Results', {
-      ['Meta']: metaResult,
-      ['Google Analytics']: gaResult,
-      ['Google Ads']: gadsResult
-    })
-
-    return new Response(
-      JSON.stringify({
-        ['Meta']: metaResult,
-        ['Google Analytics']: gaResult,
-        ['Google Ads']: gadsResult
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        console.info(`Google Ads conversion [${gadsConversionLabel}] process started`)
+      } else {
+        console.warn(`Google Ads conversion [${gadsConversionLabel}] skipped`)
       }
-    )
+
+      await Promise.allSettled(tasks)
+    }))
+
+    return new Response('Events API worker started', { status: 200, headers: corsHeaders })
   }
 }

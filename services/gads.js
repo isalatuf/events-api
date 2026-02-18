@@ -19,13 +19,16 @@ export default async function ({ gadsPayload, gadsCustomerId, gadsAccessToken, g
 
         if (!res.ok) {
             const text = await res.text()
-            return 'Event request error: ' + text
+            console.error(`Google Ads request error (${text})`)
+            return
         }
     } catch {
-        return 'Event request failed'
+        console.error(`Google Ads request failed`)
+        return
     } finally {
         clearTimeout(timeout)
     }
 
-    return 'Event processed successfully'
+    console.info('Google Ads event processed successfully')
+    return
 }

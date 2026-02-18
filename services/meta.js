@@ -18,16 +18,20 @@ export default async function ({ metaPayload, metaPixelId, metaAccessToken, meta
         if (!res.ok) {
             try {
                 const json = JSON.parse(text)
-                return 'Event request error: ' + (json.error?.error_user_msg || json.error?.message || text)
+                console.error(`Meta request error (${json.error?.error_user_msg || json.error?.message || text})`)
+                return
             } catch {
-                return 'Event request error: ' + text
+                console.error(`Meta request error (${text})`)
+                return
             }
         }
     } catch {
-        return 'Event request failed'
+        console.error(`Meta request failed`)
+        return
     } finally {
         clearTimeout(timeout)
     }
 
-    return `Event processed succesfully`
+    console.info('Meta event processed successfully')
+    return
 }

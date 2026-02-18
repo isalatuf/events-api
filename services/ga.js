@@ -15,13 +15,16 @@ export default async function ({ gaPayload, gaMeasurementId, gaSecretKey }) {
 
         if (!res.ok) {
             const text = await res.text()
-            return 'Event request error: ' + text
+            console.error(`Google Analytics request error (${text})`)
+            return
         }
     } catch {
-        return 'Event request failed'
+        console.error(`Google Analytics request failed`)
+        return
     } finally {
         clearTimeout(timeout)
     }
 
-    return `Event processed succesfully`
+    console.info('Google Analytics event processed successfully')
+    return
 }
