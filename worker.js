@@ -107,7 +107,7 @@ export default {
       cookieGclid
     } = data
 
-    console.info('Events', {
+    console.info('Processes', {
       ['Meta']: metaEvent,
       ['Google Analytics']: gaEvent,
       ['Google Ads']: gadsConversionLabel
@@ -235,7 +235,7 @@ export default {
     })
 
     return new Response(
-      JSON.stringify('Results', {
+      JSON.stringify({
         ['Meta']: metaResult,
         ['Google Analytics']: gaResult,
         ['Google Ads']: gadsResult
