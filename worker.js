@@ -158,6 +158,8 @@ export default {
       const tasks = []
 
       if (metaEvent && metaPixelId && metaAccessToken) {
+        console.info(`Meta event [${metaEvent}] process started`)
+
         const metaPayload = {
           data: [{
             event_name: metaEvent,
@@ -182,16 +184,14 @@ export default {
           }]
         }
 
-        tasks.push(
-          metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode })
-        )
-
-        console.info(`Meta event [${metaEvent}] process started`)
+        tasks.push(metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode }))
       } else {
         console.warn(`Meta event [${metaEvent}] skipped`)
       }
 
       if (gaEvent && gaMeasurementId && gaSecretKey) {
+        console.info(`Google Analytics event [${gaEvent}] process started`)
+
         const gaPayload = {
           client_id: userId,
           events: [{
@@ -206,16 +206,14 @@ export default {
           }]
         }
 
-        tasks.push(
-          gaService({ gaPayload, gaMeasurementId, gaSecretKey })
-        )
-
-        console.info(`Google Analytics event [${gaEvent}] process started`)
+        tasks.push(gaService({ gaPayload, gaMeasurementId, gaSecretKey }))
       } else {
         console.warn(`Google Analytics event [${gaEvent}] skipped`)
       }
 
       if (cookieGclid && gadsConversionLabel && gadsCustomerId && gadsAccessToken && gadsDeveloperToken) {
+        console.info(`Google Ads conversion [${gadsConversionLabel}] process started`)
+
         const gadsPayload = {
           conversions: [{
             conversionAction: `customers/${gadsCustomerId}/conversionActions/${gadsConversionLabel}`,
@@ -232,11 +230,7 @@ export default {
           partialFailure: true
         }
 
-        tasks.push(
-          gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken })
-        )
-
-        console.info(`Google Ads conversion [${gadsConversionLabel}] process started`)
+        tasks.push(gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken }))
       } else {
         console.warn(`Google Ads conversion [${gadsConversionLabel}] skipped`)
       }
