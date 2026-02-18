@@ -87,9 +87,6 @@ export default {
       return new Response('Invalid JSON', { status: 400, headers: corsHeaders })
     }
 
-    ctx.waitUntil(Promise.resolve(console.log('WAITUNTIL TEST')))
-
-
     ctx.waitUntil((async () => {
 
       const metaAccessToken = env.META_ACCESS_TOKEN || null
@@ -193,7 +190,7 @@ export default {
 
           tasks.push(metaService({ metaPayload, metaPixelId, metaAccessToken, metaTestCode }))
         } else {
-          console.warn(`Meta event [${metaEvent}] skipped`)
+          console.warn(`Meta event skipped`)
         }
 
         if (gaEvent && gaMeasurementId && gaSecretKey) {
@@ -215,7 +212,7 @@ export default {
 
           tasks.push(gaService({ gaPayload, gaMeasurementId, gaSecretKey }))
         } else {
-          console.warn(`Google Analytics event [${gaEvent}] skipped`)
+          console.warn(`Google Analytics event skipped`)
         }
 
         if (cookieGclid && gadsConversionLabel && gadsCustomerId && gadsAccessToken && gadsDeveloperToken) {
@@ -239,7 +236,7 @@ export default {
 
           tasks.push(gadsService({ gadsPayload, gadsCustomerId, gadsAccessToken, gadsDeveloperToken }))
         } else {
-          console.warn(`Google Ads conversion [${gadsConversionLabel}] skipped`)
+          console.warn(`Google Ads conversion skipped`)
         }
 
         await Promise.allSettled(tasks)
